@@ -10,9 +10,10 @@ from datetime import datetime, timedelta
 
 import tempfile
 
-# WIB (Waktu Indonesia Barat)
-wib = pytz.timezone('Asia/Jakarta')
-now = datetime.now(wib)
+# contoh set timezone ke Jakarta
+timezone = pytz.timezone('Asia/Jakarta')
+waktu_sekarang = datetime.now(timezone)
+print(waktu_sekarang.strftime('%Y-%m-%d %H:%M:%S'))
 
 def adapt_datetime(val): 
     return val.isoformat()
