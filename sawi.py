@@ -227,6 +227,7 @@ def halaman_kasir():
         if not stok_kurang:
             conn.commit()
 
+            # Ambil waktu saat ini setiap kali tombol ditekan
             from datetime import datetime
             now = datetime.now()
             waktu_str = now.strftime("%d %b %y %H:%M")
