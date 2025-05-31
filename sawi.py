@@ -3,11 +3,16 @@ import pandas as pd
 import os 
 import io 
 import sqlite3 
+import pytz
 from datetime import datetime 
 from fpdf import FPDF 
 from datetime import datetime, timedelta
 
 import tempfile
+
+# WIB (Waktu Indonesia Barat)
+wib = pytz.timezone('Asia/Jakarta')
+now = datetime.now(wib)
 
 def adapt_datetime(val): 
     return val.isoformat()
