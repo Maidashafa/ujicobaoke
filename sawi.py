@@ -5,6 +5,8 @@ import io
 import sqlite3 
 from datetime import datetime 
 from fpdf import FPDF 
+from datetime import datetime, timedelta
+
 import tempfile
 
 def adapt_datetime(val): 
@@ -153,9 +155,9 @@ def get_nomor_nota():
 # ---------- FUNGSI KASIR ----------
 def halaman_kasir():
     st.subheader("🛒 Kasir")
-    
+
     init_db()
-    
+
     # Ambil data produk
     conn = sqlite3.connect('kasir.db')
     df = pd.read_sql_query("SELECT * FROM produk WHERE stok > 0", conn)
@@ -176,9 +178,14 @@ def halaman_kasir():
             with col1:
                 st.markdown(f"{row['nama']}")
                 st.caption(f"{format_harga(row['harga'])} | Stok: {int(row['stok'])}")
-   
+
             with col2:
-                jumlah = st.number_input(f"Jumlah {row['nama']}", min_value=0, max_value=int(row["stok"]), key=f"jumlah_{i}")
+                jumlah = st.number_input(
+                    f"Jumlah {row['nama']}",
+                    min_value=0,
+                    max_value=int(row["stok"]),
+                    key=f"jumlah_{i}"
+                )
 
             with col3:
                 if st.button("Tambah", key=f"btn_{i}"):
@@ -201,7 +208,6 @@ def halaman_kasir():
         c = conn.cursor()
         stok_kurang = False
 
-        # Periksa stok dalam transaksi
         for nama, harga, qty in st.session_state.keranjang:
             c.execute("SELECT stok FROM produk WHERE nama = ?", (nama,))
             result = c.fetchone()
@@ -215,13 +221,14 @@ def halaman_kasir():
         if not stok_kurang:
             conn.commit()
 
+            from datetime import datetime
             now = datetime.now()
             waktu_str = now.strftime("%d %b %y %H:%M")
             nomor_nota = get_nomor_nota()
 
             total = sum(harga * qty for _, harga, qty in st.session_state.keranjang)
 
-            # struk
+            # Buat struk
             struk_lines = []
             struk_lines.append("         Kasir Hijau")
             struk_lines.append("=" * 30)
@@ -248,10 +255,17 @@ def halaman_kasir():
             struk_lines.append("Dicetak: Kasir")
 
             struk = "\n".join(struk_lines)
-            st.text_area("🧾 Struk Transaksi", struk, height=300)
-            st.download_button("📥 Unduh Struk TXT", data=struk, file_name="struk_pembelian.txt", mime="text/plain")
 
-            # MEMBUAT VERSI PDF
+            # Tampilkan struk
+            st.text_area("🧾 Struk Transaksi", struk, height=300)
+            st.download_button(
+                "📥 Unduh Struk TXT",
+                data=struk,
+                file_name="struk_pembelian.txt",
+                mime="text/plain"
+            )
+
+            # Versi PDF
             pdf = FPDF()
             pdf.add_page()
             pdf.set_font("Courier", size=10)
@@ -261,20 +275,29 @@ def halaman_kasir():
             pdf_bytes = pdf.output(dest="S").encode("latin-1")
             pdf_buffer = io.BytesIO(pdf_bytes)
 
-            st.download_button("📄 Unduh Struk PDF", data=pdf_buffer, file_name="struk_pembelian.pdf", mime="application/pdf")
+            st.download_button(
+                "📄 Unduh Struk PDF",
+                data=pdf_buffer,
+                file_name="struk_pembelian.pdf",
+                mime="application/pdf"
+            )
 
-            # SIMPAN RIWAYAT
+            # Simpan riwayat
             for nama, harga, qty in st.session_state.keranjang:
-                c.execute("""
+                c.execute(
+                    """
                     INSERT INTO riwayat (nama, harga, qty, kasir, waktu, nota)
                     VALUES (?, ?, ?, ?, ?, ?)
-                """, (nama, harga, qty, st.session_state.username, now, nomor_nota))
-            
+                    """,
+                    (nama, harga, qty, st.session_state.username, now, nomor_nota)
+                )
+
             conn.commit()
             st.success("Pembelian berhasil!")
             st.session_state.keranjang = []
-        
+
         conn.close()
+
 
 # ----------- RESET DATA PRODUK -------------
 def reset_data():
@@ -494,7 +517,18 @@ def halaman_laporan():
         if filter_jenis == "Harian":
             pdf.cell(200, 8, txt=f"Periode: {tanggal}", ln=True, align="C")
         elif filter_jenis == "Mingguan":
-            pdf.cell(200, 8, txt=f"Periode: Minggu ke-{minggu} Tahun {tahun}", ln=True, align="C")
+         tahun = st.number_input("Tahun", value=now.year, step=1, key="tahun_laporan")
+         minggu = st.selectbox("Pilih Minggu ke-", list(range(1, 54)), index=now.isocalendar()[1] - 1)
+
+           # Hitung tanggal awal dan akhir minggu
+         tanggal_awal = pd.to_datetime(f'{tahun}-W{minggu:02d}-1', format='%G-W%V-%u')
+         tanggal_akhir = tanggal_awal + timedelta(days=6)
+
+         filtered = riwayat_df[
+          (riwayat_df["waktu"].dt.date >= tanggal_awal.date()) &
+          (riwayat_df["waktu"].dt.date <= tanggal_akhir.date())
+          ]
+
         elif filter_jenis == "Bulanan":
             bulan_nama = ["Januari", "Februari", "Maret", "April", "Mei", "Juni",
                           "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
