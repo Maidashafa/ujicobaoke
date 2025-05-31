@@ -416,7 +416,6 @@ def edit_produk():
 
             st.success(f"Produk '{produk_dipilih}' berhasil diperbarui!")
 
-# ---------- FUNGSI LAPORAN ----------
 def halaman_laporan():
     st.subheader("📊 Laporan Produk")
     
@@ -457,16 +456,16 @@ def halaman_laporan():
             st.error("Gagal mengkonversi format tanggal. Beberapa fitur laporan mungkin tidak berfungsi.")
 
     # PILIHAN FILTER
-    filter_jenis = st.radio("Filter berdasarkan:", ["Harian", "Mingguan", "Bulanan"], horizontal=True)
+    filter_jenis = st.radio("Filter berdasarkan:", ["Harian", "Mingguan", "Bulanan"], horizontal=True, key="filter_jenis")
 
     now = pd.Timestamp.now()
     if filter_jenis == "Harian":
-        tanggal = st.date_input("Pilih Tanggal", now.date())
+        tanggal = st.date_input("Pilih Tanggal", now.date(), key="tanggal_harian")
         filtered = riwayat_df[riwayat_df["waktu"].dt.date == tanggal]
 
     elif filter_jenis == "Mingguan":
-        tahun = st.number_input("Tahun", value=now.year, step=1)
-        minggu = st.selectbox("Pilih Minggu ke-", list(range(1, 54)), index=now.isocalendar()[1] - 1)
+        tahun = st.number_input("Tahun (filter mingguan)", value=now.year, step=1, key="tahun_mingguan")
+        minggu = st.selectbox("Pilih Minggu ke- (filter mingguan)", list(range(1, 54)), index=now.isocalendar()[1] - 1, key="minggu_mingguan")
     
         filtered = riwayat_df[
             (riwayat_df["waktu"].dt.isocalendar().week == minggu) &
@@ -474,8 +473,8 @@ def halaman_laporan():
         ]
 
     elif filter_jenis == "Bulanan":
-        bulan = st.selectbox("Pilih Bulan", list(range(1, 13)), index=now.month - 1)
-        tahun = st.number_input("Tahun", value=now.year, step=1)
+        bulan = st.selectbox("Pilih Bulan", list(range(1, 13)), index=now.month - 1, key="bulan_bulanan")
+        tahun = st.number_input("Tahun (filter bulanan)", value=now.year, step=1, key="tahun_bulanan")
         filtered = riwayat_df[
             (riwayat_df["waktu"].dt.month == bulan) &
             (riwayat_df["waktu"].dt.year == tahun)
@@ -522,18 +521,23 @@ def halaman_laporan():
         pdf.set_font("Arial", size=10)
         if filter_jenis == "Harian":
             pdf.cell(200, 8, txt=f"Periode: {tanggal}", ln=True, align="C")
+
         elif filter_jenis == "Mingguan":
-         tahun = st.number_input("Tahun", value=now.year, step=1, key="tahun_laporan")
-         minggu = st.selectbox("Pilih Minggu ke-", list(range(1, 54)), index=now.isocalendar()[1] - 1)
+            # Ganti widget input tahun & minggu untuk PDF dengan key berbeda supaya tidak bentrok
+            tahun_pdf = st.number_input("Tahun (filter mingguan PDF)", value=now.year, step=1, key="tahun_mingguan_pdf")
+            minggu_pdf = st.selectbox("Pilih Minggu ke- (filter mingguan PDF)", list(range(1, 54)), index=now.isocalendar()[1] - 1, key="minggu_mingguan_pdf")
 
-           # Hitung tanggal awal dan akhir minggu
-         tanggal_awal = pd.to_datetime(f'{tahun}-W{minggu:02d}-1', format='%G-W%V-%u')
-         tanggal_akhir = tanggal_awal + timedelta(days=6)
+            # Hitung tanggal awal dan akhir minggu berdasarkan input PDF
+            tanggal_awal = pd.to_datetime(f'{tahun_pdf}-W{minggu_pdf:02d}-1', format='%G-W%V-%u')
+            tanggal_akhir = tanggal_awal + timedelta(days=6)
 
-         filtered = riwayat_df[
-          (riwayat_df["waktu"].dt.date >= tanggal_awal.date()) &
-          (riwayat_df["waktu"].dt.date <= tanggal_akhir.date())
-          ]
+            pdf.cell(200, 8, txt=f"Periode: Minggu ke-{minggu_pdf}, {tahun_pdf} ({tanggal_awal.date()} - {tanggal_akhir.date()})", ln=True, align="C")
+
+            # Filter ulang riwayat_df untuk PDF berdasarkan tanggal minggu ini
+            filtered = riwayat_df[
+                (riwayat_df["waktu"].dt.date >= tanggal_awal.date()) &
+                (riwayat_df["waktu"].dt.date <= tanggal_akhir.date())
+            ]
 
         elif filter_jenis == "Bulanan":
             bulan_nama = ["Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -555,19 +559,12 @@ def halaman_laporan():
         # Isi tabel
         pdf.set_font("Arial", size=7)
         for index, row in filtered.iterrows():
-            # Format harga
             harga_formatted = f"Rp{int(row['harga']):,}".replace(",", ".")
-        
-            # Format waktu
             try:
                 waktu_formatted = row['waktu'].strftime("%d/%m/%y %H:%M")
             except:
                 waktu_formatted = str(row['waktu'])[:16]
-        
-            # Potong nama produk jika terlalu panjang
             nama_produk = str(row['nama'])[:15] + "..." if len(str(row['nama'])) > 15 else str(row['nama'])
-            
-            # Potong nomor nota jika terlalu panjang
             nomor_nota = str(row['nota'])[:20] + "..." if len(str(row['nota'])) > 20 else str(row['nota'])
             
             pdf.cell(15, 6, str(row['id']), 1, 0, "C")
@@ -592,13 +589,12 @@ def halaman_laporan():
         pdf.set_font("Arial", "I", 8)
         pdf.cell(200, 6, f"Dicetak pada: {pd.Timestamp.now().strftime('%d %B %Y %H:%M:%S')}", ln=True, align="R")
 
-        # Simpan ke file sementara
+        # Simpan ke file sementara dan buat tombol unduh
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
             pdf.output(tmp_file.name)
 
         with open(tmp_file.name, "rb") as f:
             st.download_button("📄 Unduh Laporan PDF", f.read(), "laporan_transaksi.pdf", "application/pdf")
-
 # ---------- FUNGSI LOGOUT ----------   
 def logout():
     if st.sidebar.button("🔒 Logout"):
